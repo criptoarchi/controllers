@@ -53,8 +53,10 @@ export class AccountTrackerController extends BaseController<
 
   private syncAccounts() {
     const { accounts } = this.state;
+    const tempAccounts = { ...accounts };
+
     const addresses = Object.keys(this.getIdentities());
-    const existing = Object.keys(accounts);
+    const existing = Object.keys(tempAccounts);
     const newAddresses = addresses.filter(
       (address) => existing.indexOf(address) === -1,
     );
@@ -62,12 +64,12 @@ export class AccountTrackerController extends BaseController<
       (address) => addresses.indexOf(address) === -1,
     );
     newAddresses.forEach((address) => {
-      accounts[address] = { balance: '0x0' };
+      tempAccounts[address] = { balance: '0x0' };
     });
     oldAddresses.forEach((address) => {
-      delete accounts[address];
+      delete tempAccounts[address];
     });
-    this.update({ accounts: { ...accounts } });
+    this.update({ accounts: { ...tempAccounts } });
   }
 
   /**
