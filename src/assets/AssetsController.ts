@@ -829,22 +829,28 @@ export class AssetsController extends BaseController<
     try {
       address = toChecksumHexAddress(address);
       const { allTokens, tokens } = this.state;
+      const tempTokens = [...tokens];
       const { chainId, selectedAddress } = this.config;
       const newEntry: Token = { address, symbol, decimals, image };
-      const previousEntry = tokens.find((token) => token.address === address);
+      const previousEntry = tempTokens.find(
+        (token) => token.address === address,
+      );
       if (previousEntry) {
-        const previousIndex = tokens.indexOf(previousEntry);
-        tokens[previousIndex] = newEntry;
+        const previousIndex = tempTokens.indexOf(previousEntry);
+        tempTokens[previousIndex] = newEntry;
       } else {
-        tokens.push(newEntry);
+        tempTokens.push(newEntry);
       }
       const addressTokens = allTokens[selectedAddress];
-      const newAddressTokens = { ...addressTokens, ...{ [chainId]: tokens } };
+      const newAddressTokens = {
+        ...addressTokens,
+        ...{ [chainId]: tempTokens },
+      };
       const newAllTokens = {
         ...allTokens,
         ...{ [selectedAddress]: newAddressTokens },
       };
-      const newTokens = [...tokens];
+      const newTokens = [...tempTokens];
       this.update({ allTokens: newAllTokens, tokens: newTokens });
       return newTokens;
     } finally {
@@ -861,6 +867,7 @@ export class AssetsController extends BaseController<
   async addTokens(tokensToAdd: Token[]): Promise<Token[]> {
     const releaseLock = await this.mutex.acquire();
     const { allTokens, tokens } = this.state;
+    const tempTokens = [...tokens];
     const { chainId, selectedAddress } = this.config;
 
     try {
@@ -874,24 +881,27 @@ export class AssetsController extends BaseController<
           decimals,
           image,
         };
-        const previousEntry = tokens.find(
+        const previousEntry = tempTokens.find(
           (token) => token.address === checksumAddress,
         );
         if (previousEntry) {
-          const previousIndex = tokens.indexOf(previousEntry);
-          tokens[previousIndex] = newEntry;
+          const previousIndex = tempTokens.indexOf(previousEntry);
+          tempTokens[previousIndex] = newEntry;
         } else {
-          tokens.push(newEntry);
+          tempTokens.push(newEntry);
         }
       });
 
       const addressTokens = allTokens[selectedAddress];
-      const newAddressTokens = { ...addressTokens, ...{ [chainId]: tokens } };
+      const newAddressTokens = {
+        ...addressTokens,
+        ...{ [chainId]: tempTokens },
+      };
       const newAllTokens = {
         ...allTokens,
         ...{ [selectedAddress]: newAddressTokens },
       };
-      const newTokens = [...tokens];
+      const newTokens = [...tempTokens];
       this.update({ allTokens: newAllTokens, tokens: newTokens });
       return newTokens;
     } finally {
