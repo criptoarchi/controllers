@@ -117,21 +117,32 @@ export class TokenBalancesController extends BaseController<
       return;
     }
     const { tokens } = this.config;
+    const tempTokens = [...tokens];
     const newContractBalances: { [address: string]: BN } = {};
-    for (const i in tokens) {
-      const { address } = tokens[i];
-      try {
-        newContractBalances[address] = await this.getBalanceOf(
-          address,
-          this.getSelectedAddress(),
-        );
-        tokens[i].balanceError = null;
-      } catch (error) {
-        newContractBalances[address] = new BN(0);
-        tokens[i].balanceError = error;
+    for (const i in tempTokens) {
+      const { address } = tempTokens[i];
+      if (this.getSelectedAddress()) {
+        try {
+          newContractBalances[address] = await this.getBalanceOf(
+            address,
+            this.getSelectedAddress(),
+          );
+          tempTokens[i] = this._setBalanceError(tempTokens[i], null);
+        } catch (error) {
+          newContractBalances[address] = new BN(0);
+          tempTokens[i] = this._setBalanceError(tempTokens[i], error);
+        }
       }
     }
+    this.configure({ tokens: tempTokens });
     this.update({ contractBalances: newContractBalances });
+  }
+
+  _setBalanceError(token: Token, error?: Error | null) {
+    return {
+      ...token,
+      balanceError: error,
+    };
   }
 }
 
