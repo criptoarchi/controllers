@@ -813,6 +813,7 @@ export class AssetsController extends BaseController<
   /**
    * Adds a token to the stored token list
    *
+   * @param name - Name of the token
    * @param address - Hex address of the token contract
    * @param symbol - Symbol of the token
    * @param decimals - Number of decimals the token uses
@@ -820,6 +821,7 @@ export class AssetsController extends BaseController<
    * @returns - Current token list
    */
   async addToken(
+    name: string,
     address: string,
     symbol: string,
     decimals: number,
@@ -832,6 +834,7 @@ export class AssetsController extends BaseController<
       const tempTokens = [...tokens];
       const { chainId, selectedAddress } = this.config;
       const newEntry: Token = {
+        name,
         address,
         symbol,
         decimals,
@@ -878,7 +881,7 @@ export class AssetsController extends BaseController<
 
     try {
       tokensToAdd.forEach((tokenToAdd) => {
-        const { address, symbol, decimals, image } = tokenToAdd;
+        const { address, symbol, decimals, image, name } = tokenToAdd;
         const checksumAddress = toChecksumHexAddress(address);
 
         const newEntry: Token = {
@@ -887,6 +890,7 @@ export class AssetsController extends BaseController<
           decimals,
           image,
           balanceError: null,
+          name,
         };
         const previousEntry = tempTokens.find(
           (token) => token.address === checksumAddress,
@@ -987,8 +991,14 @@ export class AssetsController extends BaseController<
     try {
       switch (suggestedAssetMeta.type) {
         case 'ERC20':
-          const { address, symbol, decimals, image } = suggestedAssetMeta.asset;
-          await this.addToken(address, symbol, decimals, image);
+          const {
+            name,
+            address,
+            symbol,
+            decimals,
+            image,
+          } = suggestedAssetMeta.asset;
+          await this.addToken(name, address, symbol, decimals, image);
           suggestedAssetMeta.status = SuggestedAssetStatus.accepted;
           this.hub.emit(
             `${suggestedAssetMeta.id}:finished`,
