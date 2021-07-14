@@ -831,7 +831,13 @@ export class AssetsController extends BaseController<
       const { allTokens, tokens } = this.state;
       const tempTokens = [...tokens];
       const { chainId, selectedAddress } = this.config;
-      const newEntry: Token = { address, symbol, decimals, image };
+      const newEntry: Token = {
+        address,
+        symbol,
+        decimals,
+        image,
+        balanceError: null,
+      };
       const previousEntry = tempTokens.find(
         (token) => token.address === address,
       );
@@ -880,6 +886,7 @@ export class AssetsController extends BaseController<
           symbol,
           decimals,
           image,
+          balanceError: null,
         };
         const previousEntry = tempTokens.find(
           (token) => token.address === checksumAddress,
