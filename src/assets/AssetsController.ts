@@ -885,12 +885,12 @@ export class AssetsController extends BaseController<
         const checksumAddress = toChecksumHexAddress(address);
 
         const newEntry: Token = {
+          name,
           address: checksumAddress,
-          symbol,
           decimals,
+          symbol,
           image,
           balanceError: null,
-          name,
         };
         const previousEntry = tempTokens.find(
           (token) => token.address === checksumAddress,
