@@ -151,11 +151,12 @@ export class AccountTrackerController extends BaseController<
   refresh = async () => {
     this.syncAccounts();
     const { accounts } = this.state;
-    for (const address in accounts) {
+    const tempAccounts = { ...accounts };
+    for (const address in tempAccounts) {
       await safelyExecuteWithTimeout(async () => {
         const balance = await query(this.ethQuery, 'getBalance', [address]);
-        accounts[address] = { balance: BNToHex(balance) };
-        this.update({ accounts: { ...accounts } });
+        tempAccounts[address] = { balance: BNToHex(balance) };
+        this.update({ accounts: { ...tempAccounts } });
       });
     }
   };
