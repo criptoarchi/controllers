@@ -93,8 +93,10 @@ const LOCALHOST_RPC_URL = 'http://localhost:8545';
 /**
  * Controller that creates and manages an Ethereum network provider
  */
-export class NetworkController extends BaseController<NetworkConfig,
-  NetworkState> {
+export class NetworkController extends BaseController<
+  NetworkConfig,
+  NetworkState
+> {
   private ethQuery: any;
 
   private internalProviderConfig: ProviderConfig = {} as ProviderConfig;
@@ -106,7 +108,7 @@ export class NetworkController extends BaseController<NetworkConfig,
     rpcTarget?: string,
     chainId?: string,
     ticker?: string,
-    nickname?: string
+    nickname?: string,
   ) {
     this.update({ isCustomNetwork: this.getIsCustomNetwork(chainId) });
     if (rpcTarget) {
@@ -146,7 +148,7 @@ export class NetworkController extends BaseController<NetworkConfig,
   private setupInfuraProvider(type: NetworkType) {
     const infuraProvider = createInfuraProvider({
       network: type,
-      projectId: this.config.infuraProjectId
+      projectId: this.config.infuraProjectId,
     });
     const infuraSubprovider = new Subprovider(infuraProvider);
     const config = {
@@ -155,9 +157,9 @@ export class NetworkController extends BaseController<NetworkConfig,
         dataSubprovider: infuraSubprovider,
         engineParams: {
           blockTrackerProvider: infuraProvider,
-          pollingInterval: 12000
-        }
-      }
+          pollingInterval: 12000,
+        },
+      },
     };
     this.updateProvider(createMetamaskProvider(config));
   }
@@ -177,7 +179,7 @@ export class NetworkController extends BaseController<NetworkConfig,
     rpcTarget: string,
     chainId?: string,
     ticker?: string,
-    nickname?: string
+    nickname?: string,
   ) {
     const config = {
       ...this.internalProviderConfig,
@@ -186,8 +188,8 @@ export class NetworkController extends BaseController<NetworkConfig,
         engineParams: { pollingInterval: 12000 },
         nickname,
         rpcUrl: rpcTarget,
-        ticker
-      }
+        ticker,
+      },
     };
     this.updateProvider(createMetamaskProvider(config));
   }
@@ -230,7 +232,7 @@ export class NetworkController extends BaseController<NetworkConfig,
       network: 'loading',
       isCustomNetwork: false,
       provider: { type: MAINNET, chainId: NetworksChainId.mainnet },
-      properties: { isEIP1559Compatible: false }
+      properties: { isEIP1559Compatible: false },
     };
     this.initialize();
     this.getEIP1559Compatibility();
@@ -268,10 +270,10 @@ export class NetworkController extends BaseController<NetworkConfig,
       { method: 'net_version' },
       (error: Error, network: string) => {
         this.update({
-          network: error ? /* istanbul ignore next*/ 'loading' : network
+          network: error ? /* istanbul ignore next*/ 'loading' : network,
         });
         releaseLock();
-      }
+      },
     );
   }
 
@@ -290,8 +292,8 @@ export class NetworkController extends BaseController<NetworkConfig,
     this.update({
       provider: {
         ...providerState,
-        ...{ type, ticker: 'ETH', chainId: NetworksChainId[type] }
-      }
+        ...{ type, ticker: 'ETH', chainId: NetworksChainId[type] },
+      },
     });
     this.refreshNetwork();
   }
@@ -308,13 +310,13 @@ export class NetworkController extends BaseController<NetworkConfig,
     rpcTarget: string,
     chainId: string,
     ticker?: string,
-    nickname?: string
+    nickname?: string,
   ) {
     this.update({
       provider: {
         ...this.state.provider,
-        ...{ type: RPC, ticker, rpcTarget, chainId, nickname }
-      }
+        ...{ type: RPC, ticker, rpcTarget, chainId, nickname },
+      },
     });
     this.refreshNetwork();
   }
@@ -337,12 +339,12 @@ export class NetworkController extends BaseController<NetworkConfig,
                 typeof block.baseFeePerGas !== 'undefined';
               this.update({
                 properties: {
-                  isEIP1559Compatible
-                }
+                  isEIP1559Compatible,
+                },
               });
               resolve(isEIP1559Compatible);
             }
-          }
+          },
         );
       });
     }
