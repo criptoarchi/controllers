@@ -984,43 +984,48 @@ export class TransactionController extends BaseController<
     allTxs.sort((a, b) => (a.time < b.time ? -1 : 1));
 
     let latestIncomingTxBlockNumber: string | undefined;
-    allTxs.forEach(async (tx) => {
-      /* istanbul ignore next */
-      if (
-        // Using fallback to networkID only when there is no chainId present. Should be removed when networkID is completely removed.
-        (tx.chainId === currentChainId ||
-          (!tx.chainId && tx.networkID === currentNetworkID)) &&
-        tx.transaction.to &&
-        tx.transaction.to.toLowerCase() === address.toLowerCase()
-      ) {
+    let tempAllTxs = [...allTxs];
+    tempAllTxs = await Promise.all(
+      tempAllTxs.map(async (tx) => {
+        /* istanbul ignore next */
         if (
-          tx.blockNumber &&
-          (!latestIncomingTxBlockNumber ||
-            parseInt(latestIncomingTxBlockNumber, 10) <
-              parseInt(tx.blockNumber, 10))
-        ) {
-          latestIncomingTxBlockNumber = tx.blockNumber;
-        }
-      }
-      /* istanbul ignore else */
-      if (tx.toSmartContract === undefined) {
-        // If not `to` is a contract deploy, if not `data` is send eth
-        if (
+          // Using fallback to networkID only when there is no chainId present. Should be removed when networkID is completely removed.
+          (tx.chainId === currentChainId ||
+            (!tx.chainId && tx.networkID === currentNetworkID)) &&
           tx.transaction.to &&
-          (!tx.transaction.data || tx.transaction.data !== '0x')
+          tx.transaction.to.toLowerCase() === address.toLowerCase()
         ) {
-          const code = await query(this.ethQuery, 'getCode', [
-            tx.transaction.to,
-          ]);
-          tx.toSmartContract = isSmartContractCode(code);
-        } else {
-          tx.toSmartContract = false;
+          if (
+            tx.blockNumber &&
+            (!latestIncomingTxBlockNumber ||
+              parseInt(latestIncomingTxBlockNumber, 10) <
+                parseInt(tx.blockNumber, 10))
+          ) {
+            latestIncomingTxBlockNumber = tx.blockNumber;
+          }
         }
-      }
-    });
+        const tempTx = { ...tx };
+        /* istanbul ignore else */
+        if (tempTx.toSmartContract === undefined) {
+          // If not `to` is a contract deploy, if not `data` is send eth
+          if (
+            tempTx.transaction.to &&
+            (!tempTx.transaction.data || tempTx.transaction.data !== '0x')
+          ) {
+            const code = await query(this.ethQuery, 'getCode', [
+              tempTx.transaction.to,
+            ]);
+            tempTx.toSmartContract = isSmartContractCode(code);
+          } else {
+            tempTx.toSmartContract = false;
+          }
+        }
+        return { ...tempTx };
+      }),
+    );
     // Update state only if new transactions were fetched
-    if (allTxs.length > this.state.transactions.length) {
-      this.update({ transactions: allTxs });
+    if (tempAllTxs.length > this.state.transactions.length) {
+      this.update({ transactions: tempAllTxs });
     }
     return latestIncomingTxBlockNumber;
   }
