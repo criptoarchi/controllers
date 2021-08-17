@@ -63,7 +63,7 @@ export class ComposableController extends BaseController<never, any> {
     this.controllers.forEach((controller) => {
       const { name } = controller;
       if ((controller as BaseController<any, any>).subscribe !== undefined) {
-        (controller as BaseController<any, any>).subscribe((state) => {
+        (controller as BaseController<any, any>).subscribe(name, (state) => {
           this.update({ [name]: state });
         });
       } else if (this.messagingSystem) {

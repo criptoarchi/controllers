@@ -62,6 +62,7 @@ export interface FetchAllOptions {
  * @property nonce - Unique number to prevent replay attacks
  * @property to - Address to send this transaction to
  * @property value - Value associated with this transaction
+ * @property amount - Value associated with this transaction for ERC20 value
  */
 export interface Transaction {
   chainId?: number;
@@ -72,6 +73,7 @@ export interface Transaction {
   nonce?: string;
   to?: string;
   value?: string;
+  amount?: string;
 }
 
 /**
@@ -86,7 +88,10 @@ export enum TransactionStatus {
   failed = 'failed',
   rejected = 'rejected',
   signed = 'signed',
+  cancelSubmitted = 'cancelSubmitted',
+  accelerateSubmitted = 'accelerateSubmitted',
   submitted = 'submitted',
+  receiving = 'receiving',
   unapproved = 'unapproved',
 }
 
@@ -100,7 +105,7 @@ export enum WalletDevice {
 }
 
 type TransactionMetaBase = {
-  isTransfer?: boolean;
+  isTokenTx?: boolean;
   transferInformation?: {
     symbol: string;
     contractAddress: string;
@@ -113,10 +118,12 @@ type TransactionMetaBase = {
   rawTransaction?: string;
   time: number;
   toSmartContract?: boolean;
+  fromSmartContract?: boolean;
   transaction: Transaction;
   transactionHash?: string;
   blockNumber?: string;
   deviceConfirmedOn?: WalletDevice;
+  confirmations?: string;
 };
 
 /**
@@ -278,18 +285,22 @@ export class TransactionController extends BaseController<
    * @param txMeta - Object containing the transaction information
    * @param currentNetworkID - string representing the current network id
    * @param currentChainId - string representing the current chain id
+   * @param address - sender Address
    * @returns - TransactionMeta
    */
   private normalizeTx(
     txMeta: EtherscanTransactionMeta,
     currentNetworkID: string,
     currentChainId: string,
+    address: string,
   ): TransactionMeta {
     const time = parseInt(txMeta.timeStamp, 10) * 1000;
+    const confirmations = Number(txMeta.confirmations);
     const normalizedTransactionBase = {
       blockNumber: txMeta.blockNumber,
       id: random({ msecs: time }),
       networkID: currentNetworkID,
+      confirmations: txMeta.confirmations,
       chainId: currentChainId,
       time,
       transaction: {
@@ -306,9 +317,17 @@ export class TransactionController extends BaseController<
 
     /* istanbul ignore else */
     if (txMeta.isError === '0') {
+      let tempStatus = TransactionStatus.confirmed;
+      if (confirmations < 2) {
+        tempStatus =
+          txMeta.from.toLowerCase() === address.toLowerCase()
+            ? TransactionStatus.submitted
+            : TransactionStatus.receiving;
+      }
+
       return {
         ...normalizedTransactionBase,
-        status: TransactionStatus.confirmed,
+        status: tempStatus,
       };
     }
 
@@ -324,8 +343,10 @@ export class TransactionController extends BaseController<
     txMeta: EtherscanTransactionMeta,
     currentNetworkID: string,
     currentChainId: string,
+    address: string,
   ): TransactionMeta => {
     const time = parseInt(txMeta.timeStamp, 10) * 1000;
+    const confirmations = Number(txMeta.confirmations);
     const {
       to,
       from,
@@ -336,21 +357,34 @@ export class TransactionController extends BaseController<
       tokenDecimal,
       tokenSymbol,
       value,
+      nonce,
     } = txMeta;
+
+    let tempStatus = TransactionStatus.confirmed;
+    if (confirmations < 2) {
+      tempStatus =
+        txMeta.from.toLowerCase() === address.toLowerCase()
+          ? TransactionStatus.submitted
+          : TransactionStatus.receiving;
+    }
+
     return {
+      blockNumber: txMeta.blockNumber,
       id: random({ msecs: time }),
-      isTransfer: true,
+      isTokenTx: true,
       networkID: currentNetworkID,
       chainId: currentChainId,
-      status: TransactionStatus.confirmed,
+      confirmations: txMeta.confirmations,
+      status: tempStatus,
       time,
       transaction: {
-        chainId: 1,
+        chainId: Number(currentNetworkID) || Number(currentChainId),
         from,
         gas,
         gasPrice,
         to,
         value,
+        nonce: BNToHex(new BN(nonce)),
       },
       transactionHash: hash,
       transferInformation: {
@@ -468,7 +502,7 @@ export class TransactionController extends BaseController<
    * unique transaction id will be generated, and gas and gasPrice will be calculated
    * if not provided. If A `<tx.id>:unapproved` hub event will be emitted once added.
    *
-   * @param transaction - Transaction object to add
+   * @param normalTransaction - Transaction object to add
    * @param origin - Domain origin to append to the generated TransactionMeta
    * @param deviceConfirmedOn - enum to indicate what device the transaction was confirmed to append to the generated TransactionMeta
    * @returns - Object containing a promise resolving to the transaction hash if approved
@@ -477,11 +511,17 @@ export class TransactionController extends BaseController<
     transaction: Transaction,
     origin?: string,
     deviceConfirmedOn?: WalletDevice,
+    transferInformation?: {
+      symbol: string;
+      contractAddress: string;
+      decimals: number;
+    },
   ): Promise<Result> {
     const { provider, network } = this.getNetworkState();
     const { transactions } = this.state;
-    transaction = normalizeTransaction(transaction);
-    validateTransaction(transaction);
+    const tempTxs = [...transactions];
+    const normalTransaction = normalizeTransaction(transaction);
+    validateTransaction(normalTransaction);
 
     const transactionMeta = {
       id: random(),
@@ -490,14 +530,19 @@ export class TransactionController extends BaseController<
       origin,
       status: TransactionStatus.unapproved as TransactionStatus.unapproved,
       time: Date.now(),
-      transaction,
+      transaction: normalTransaction,
       deviceConfirmedOn,
+      transferInformation: transferInformation && transferInformation,
+      isTokenTx: transferInformation && true,
+      toSmartContract: transferInformation && false,
+      fromSmartContract: transferInformation && false,
+      amount: transferInformation && transaction.amount,
     };
 
     try {
-      const { gas, gasPrice } = await this.estimateGas(transaction);
-      transaction.gas = gas;
-      transaction.gasPrice = gasPrice;
+      const { gas, gasPrice } = await this.estimateGas(normalTransaction);
+      normalTransaction.gas = gas;
+      normalTransaction.gasPrice = gasPrice;
     } catch (error) {
       this.failTransaction(transactionMeta, error);
       return Promise.reject(error);
@@ -536,8 +581,8 @@ export class TransactionController extends BaseController<
       );
     });
 
-    transactions.push(transactionMeta);
-    this.update({ transactions: [...transactions] });
+    tempTxs.push(transactionMeta);
+    this.update({ transactions: [...tempTxs] });
     this.hub.emit(`unapprovedTransaction`, transactionMeta);
     return { result, transactionMeta };
   }
@@ -594,19 +639,16 @@ export class TransactionController extends BaseController<
     const index = transactions.findIndex(({ id }) => transactionID === id);
     const transactionMeta = transactions[index];
     const { nonce } = transactionMeta.transaction;
-
+    let tempTxMeta = { ...transactionMeta };
     try {
-      const { from } = transactionMeta.transaction;
+      const { from } = tempTxMeta.transaction;
       if (!this.sign) {
         releaseLock();
-        this.failTransaction(
-          transactionMeta,
-          new Error('No sign method defined.'),
-        );
+        this.failTransaction(tempTxMeta, new Error('No sign method defined.'));
         return;
       } else if (!currentChainId) {
         releaseLock();
-        this.failTransaction(transactionMeta, new Error('No chainId defined.'));
+        this.failTransaction(tempTxMeta, new Error('No chainId defined.'));
         return;
       }
 
@@ -617,13 +659,22 @@ export class TransactionController extends BaseController<
         nonce ||
         (await query(this.ethQuery, 'getTransactionCount', [from, 'pending']));
 
-      transactionMeta.status = status;
-      transactionMeta.transaction.nonce = txNonce;
-      transactionMeta.transaction.chainId = chainId;
+      tempTxMeta.status = status;
+      // transactionMeta.transaction.nonce = txNonce;
+      // transactionMeta.transaction.chainId = chainId;
+      tempTxMeta = {
+        ...tempTxMeta,
+        status,
+        transaction: {
+          ...tempTxMeta.transaction,
+          nonce: txNonce,
+          chainId,
+        },
+      };
 
       const txParams = {
-        ...transactionMeta.transaction,
-        gasLimit: transactionMeta.transaction.gas,
+        ...tempTxMeta.transaction,
+        gasLimit: tempTxMeta.transaction.gas,
         chainId,
         nonce: txNonce,
         status,
@@ -632,21 +683,28 @@ export class TransactionController extends BaseController<
       const unsignedEthTx = this.prepareUnsignedEthTx(txParams);
 
       const signedTx = await this.sign(unsignedEthTx, from);
-      transactionMeta.status = TransactionStatus.signed;
-      this.updateTransaction(transactionMeta);
+      tempTxMeta.status = TransactionStatus.signed;
+      this.updateTransaction(tempTxMeta);
       const rawTransaction = bufferToHex(signedTx.serialize());
-
-      transactionMeta.rawTransaction = rawTransaction;
-      this.updateTransaction(transactionMeta);
+      // transactionMeta.rawTransaction = rawTransaction;
+      tempTxMeta = {
+        ...tempTxMeta,
+        rawTransaction,
+      };
+      this.updateTransaction(tempTxMeta);
       const transactionHash = await query(this.ethQuery, 'sendRawTransaction', [
         rawTransaction,
       ]);
-      transactionMeta.transactionHash = transactionHash;
-      transactionMeta.status = TransactionStatus.submitted;
-      this.updateTransaction(transactionMeta);
-      this.hub.emit(`${transactionMeta.id}:finished`, transactionMeta);
+      // tempTxMeta.transactionHash = transactionHash;
+      tempTxMeta = {
+        ...tempTxMeta,
+        transactionHash,
+      };
+      tempTxMeta.status = TransactionStatus.submitted;
+      this.updateTransaction(tempTxMeta);
+      this.hub.emit(`${tempTxMeta.id}:finished`, tempTxMeta);
     } catch (error) {
-      this.failTransaction(transactionMeta, error);
+      this.failTransaction(tempTxMeta, error);
     } finally {
       releaseLock();
     }
@@ -691,7 +749,10 @@ export class TransactionController extends BaseController<
       throw new Error('No sign method defined.');
     }
 
-    const existingGasPrice = transactionMeta.transaction.gasPrice;
+    const { transactions } = this.state;
+    const tempTxs = [...transactions];
+    const tempTransactionMeta = { ...transactionMeta };
+    const existingGasPrice = tempTransactionMeta.transaction.gasPrice;
     /* istanbul ignore next */
     const existingGasPriceDecimal = parseInt(
       existingGasPrice === undefined ? '0x0' : existingGasPrice,
@@ -704,11 +765,11 @@ export class TransactionController extends BaseController<
     );
 
     const txParams = {
-      from: transactionMeta.transaction.from,
-      gasLimit: transactionMeta.transaction.gas,
+      from: tempTransactionMeta.transaction.from,
+      gasLimit: tempTransactionMeta.transaction.gas,
       gasPrice,
-      nonce: transactionMeta.transaction.nonce,
-      to: transactionMeta.transaction.from,
+      nonce: tempTransactionMeta.transaction.nonce,
+      to: tempTransactionMeta.transaction.from,
       value: '0x0',
     };
 
@@ -716,12 +777,29 @@ export class TransactionController extends BaseController<
 
     const signedTx = await this.sign(
       unsignedEthTx,
-      transactionMeta.transaction.from,
+      tempTransactionMeta.transaction.from,
     );
     const rawTransaction = bufferToHex(signedTx.serialize());
-    await query(this.ethQuery, 'sendRawTransaction', [rawTransaction]);
-    transactionMeta.status = TransactionStatus.cancelled;
-    this.hub.emit(`${transactionMeta.id}:finished`, transactionMeta);
+    const transactionHash = await query(this.ethQuery, 'sendRawTransaction', [
+      rawTransaction,
+    ]);
+
+    const newTransactionMeta = {
+      ...transactionMeta,
+      id: random(),
+      time: Date.now(),
+      transaction: {
+        ...transactionMeta.transaction,
+        gasPrice,
+      },
+      transactionHash,
+    };
+    newTransactionMeta.status = TransactionStatus.cancelSubmitted;
+    const findIndex = tempTxs.findIndex(({ id }) => id === transactionID);
+    tempTxs.splice(findIndex, 1);
+    tempTxs.push(newTransactionMeta);
+    this.update({ transactions: [...tempTxs] });
+    this.hub.emit(`${tempTransactionMeta.id}:finished`, newTransactionMeta);
   }
 
   /**
@@ -744,6 +822,7 @@ export class TransactionController extends BaseController<
     }
 
     const { transactions } = this.state;
+    const tempTxs = [...transactions];
     const existingGasPrice = transactionMeta.transaction.gasPrice;
     /* istanbul ignore next */
     const existingGasPriceDecimal = parseInt(
@@ -782,8 +861,11 @@ export class TransactionController extends BaseController<
       },
       transactionHash,
     };
-    transactions.push(newTransactionMeta);
-    this.update({ transactions: [...transactions] });
+    newTransactionMeta.status = TransactionStatus.accelerateSubmitted;
+    const findIndex = tempTxs.findIndex(({ id }) => id === transactionID);
+    tempTxs.splice(findIndex, 1);
+    tempTxs.push(newTransactionMeta);
+    this.update({ transactions: [...tempTxs] });
     this.hub.emit(`${transactionMeta.id}:speedup`, newTransactionMeta);
   }
 
@@ -903,13 +985,14 @@ export class TransactionController extends BaseController<
    */
   updateTransaction(transactionMeta: TransactionMeta) {
     const { transactions } = this.state;
+    const tempTxs = [...transactions];
     transactionMeta.transaction = normalizeTransaction(
       transactionMeta.transaction,
     );
     validateTransaction(transactionMeta.transaction);
-    const index = transactions.findIndex(({ id }) => transactionMeta.id === id);
-    transactions[index] = transactionMeta;
-    this.update({ transactions: [...transactions] });
+    const index = tempTxs.findIndex(({ id }) => transactionMeta.id === id);
+    tempTxs[index] = transactionMeta;
+    this.update({ transactions: [...tempTxs] });
   }
 
   /**
@@ -964,27 +1047,56 @@ export class TransactionController extends BaseController<
       etherscanTokenResponse,
     ] = await handleTransactionFetch(networkType, address, opt);
 
-    const normalizedTxs = etherscanTxResponse.result.map(
+    let remoteEtherTxs = etherscanTxResponse.result.map(
       (tx: EtherscanTransactionMeta) =>
-        this.normalizeTx(tx, currentNetworkID, currentChainId),
-    );
-    const normalizedTokenTxs = etherscanTokenResponse.result.map(
-      (tx: EtherscanTransactionMeta) =>
-        this.normalizeTokenTx(tx, currentNetworkID, currentChainId),
+        this.normalizeTx(tx, currentNetworkID, currentChainId, address),
     );
 
-    const remoteTxs = [...normalizedTxs, ...normalizedTokenTxs].filter((tx) => {
-      const alreadyInTransactions = this.state.transactions.find(
-        ({ transactionHash }) => transactionHash === tx.transactionHash,
-      );
-      return !alreadyInTransactions;
-    });
+    remoteEtherTxs = remoteEtherTxs.filter(
+      this.duplicatedTxHash(remoteEtherTxs),
+    );
 
-    const allTxs = [...remoteTxs, ...this.state.transactions];
-    allTxs.sort((a, b) => (a.time < b.time ? -1 : 1));
+    let remoteTokenTxs = etherscanTokenResponse.result.map(
+      (tx: EtherscanTransactionMeta) =>
+        this.normalizeTokenTx(tx, currentNetworkID, currentChainId, address),
+    );
+
+    remoteTokenTxs = remoteTokenTxs.filter(
+      this.duplicatedTxHash(remoteTokenTxs),
+    );
+
+    // ether txs
+    const removeLocalEtherTxs: any[] = [];
+    let localEtherTxs = this.state.transactions.filter(
+      (localTx) => !localTx.isTokenTx,
+    );
+    const remoteEtherTxsForAdd = remoteEtherTxs.filter(
+      this.filterForRemoteTx(localEtherTxs, address, removeLocalEtherTxs),
+    );
+    localEtherTxs = localEtherTxs.filter(
+      this.filterForLocalTx(removeLocalEtherTxs),
+    );
+
+    // token txs
+    const removeLocalTokenTxs: any[] = [];
+    let localTokenTxs = this.state.transactions.filter(
+      (localTx) => localTx.isTokenTx,
+    );
+    const remoteTokenTxsForAdd = remoteTokenTxs.filter(
+      this.filterForRemoteTx(localTokenTxs, address, removeLocalTokenTxs),
+    );
+    localTokenTxs = localTokenTxs.filter(
+      this.filterForLocalTx(removeLocalTokenTxs),
+    );
+
+    let tempAllTxs = [
+      ...localEtherTxs,
+      ...remoteEtherTxsForAdd,
+      ...localTokenTxs,
+      ...remoteTokenTxsForAdd,
+    ];
 
     let latestIncomingTxBlockNumber: string | undefined;
-    let tempAllTxs = [...allTxs];
     tempAllTxs = await Promise.all(
       tempAllTxs.map(async (tx) => {
         /* istanbul ignore next */
@@ -1004,30 +1116,153 @@ export class TransactionController extends BaseController<
             latestIncomingTxBlockNumber = tx.blockNumber;
           }
         }
+
         const tempTx = { ...tx };
         /* istanbul ignore else */
         if (tempTx.toSmartContract === undefined) {
           // If not `to` is a contract deploy, if not `data` is send eth
-          if (
-            tempTx.transaction.to &&
-            (!tempTx.transaction.data || tempTx.transaction.data !== '0x')
-          ) {
-            const code = await query(this.ethQuery, 'getCode', [
-              tempTx.transaction.to,
-            ]);
-            tempTx.toSmartContract = isSmartContractCode(code);
-          } else {
-            tempTx.toSmartContract = false;
-          }
+          tempTx.toSmartContract = await this.checkSmartContract(
+            tempTx,
+            tempTx.transaction.to,
+          );
+        }
+        if (tempTx.fromSmartContract === undefined) {
+          // If not `from` is a contract deploy, if not `data` is send eth
+          tempTx.fromSmartContract = await this.checkSmartContract(
+            tempTx,
+            tempTx.transaction.from,
+          );
         }
         return { ...tempTx };
       }),
     );
+    tempAllTxs.sort((a: any, b: any) => (a.time < b.time ? -1 : 1));
+
     // Update state only if new transactions were fetched
-    if (tempAllTxs.length > this.state.transactions.length) {
+    if (this.state.transactions.length === 0) {
+      this.update({ transactions: tempAllTxs });
+    } else if (
+      removeLocalEtherTxs.length > 0 ||
+      removeLocalTokenTxs.length > 0 ||
+      remoteEtherTxsForAdd.length > 0 ||
+      remoteTokenTxsForAdd.length > 0
+    ) {
       this.update({ transactions: tempAllTxs });
     }
+
     return latestIncomingTxBlockNumber;
+  }
+
+  private duplicatedTxHash(
+    remoteTxs: (
+      | ({
+          status: Exclude<TransactionStatus, TransactionStatus.failed>;
+        } & TransactionMetaBase)
+      | ({
+          status: TransactionStatus.failed;
+          error: Error;
+        } & TransactionMetaBase)
+    )[],
+  ) {
+    return (item: any, index: number) => {
+      const findIndex = remoteTxs.findIndex((tx) => {
+        return tx.transactionHash === item.transactionHash;
+      });
+      return findIndex === index;
+    };
+  }
+
+  private filterForLocalTx(removeLocalTxs: any[]) {
+    return (localTx: any) => {
+      const alreadyInLocalTx = removeLocalTxs.find(({ transactionHash }) => {
+        return transactionHash === localTx.transactionHash;
+      });
+      return !alreadyInLocalTx;
+    };
+  }
+
+  private filterForRemoteTx(
+    localTxs: TransactionMeta[],
+    address: string,
+    removeLocalTxs: any[],
+  ) {
+    return (remoteTx: any) => {
+      // 중복검사
+      // 1. 만약 중복이 있으면
+      //  1-1. 로컬 tx status 가 confirmed 가 아니면서 리모트 tx status 가 confirmed 인 경우
+      //  1-1-1. 로컬 tx 를 삭제한 후 리모트 tx 를 추가해준다.
+      //  1-2. 로컬 tx status 가 confirmed 가 아니면서 리모트 tx status 가 confirmed 가 아닌 경우
+      //  1-2-1. 로컬 tx 를 그대로 사용하며 리모트 tx 는 추가를 안해준다.
+      // 2. 중복이 없으면
+      //  2-1. 리모트 tx 를 추가해준다.
+      const alreadyInLocalTx = localTxs.find(
+        ({ transaction, transactionHash }) => {
+          if (
+            transaction.from.toLowerCase() === address.toLowerCase() &&
+            remoteTx.transaction.from.toLowerCase() === address.toLowerCase()
+          ) {
+            return transaction.nonce === remoteTx.transaction.nonce;
+          }
+          return transactionHash === remoteTx.transactionHash;
+        },
+      );
+      if (alreadyInLocalTx) {
+        if (
+          alreadyInLocalTx.status !== TransactionStatus.confirmed &&
+          remoteTx.status === TransactionStatus.confirmed
+        ) {
+          //  1-1. 로컬 tx status 가 confirmed 가 아니면서 리모트 tx status 가 confirmed 인 경우
+          //  1-1-1. 로컬 tx 를 삭제한 후 리모트 tx 를 추가해준다.
+          removeLocalTxs.push(alreadyInLocalTx);
+          return true;
+        }
+        //  1-2. 로컬 tx status 가 confirmed 가 아니면서 리모트 tx status 가 confirmed 가 아닌 경우
+        //  1-2-1. 로컬 tx 를 그대로 사용하며 리모트 tx 는 추가를 안해준다.
+        return false;
+      }
+      // 2. 중복이 없으면
+      //  2-1. 리모트 tx 를 추가해준다.
+      return true;
+    };
+  }
+
+  private async checkSmartContract(
+    tempTx: {
+      toSmartContract?: boolean;
+      origin?: string;
+      transactionHash?: string;
+      transferInformation?: {
+        symbol: string;
+        contractAddress: string;
+        decimals: number;
+      };
+      fromSmartContract?: boolean;
+      rawTransaction?: string;
+      isTokenTx?: boolean;
+      deviceConfirmedOn?: WalletDevice;
+      chainId?: string;
+      blockNumber?: string;
+      networkID?: string;
+      id: string;
+      time: number;
+      transaction: Transaction;
+      status:
+        | Exclude<TransactionStatus, TransactionStatus.failed>
+        | TransactionStatus.failed;
+    },
+    checkAddress: string | undefined,
+  ) {
+    if (checkAddress === '0x0000000000000000000000000000000000000000') {
+      return true;
+    }
+    if (
+      checkAddress &&
+      (!tempTx.transaction.data || tempTx.transaction.data !== '0x')
+    ) {
+      const code = await query(this.ethQuery, 'getCode', [checkAddress]);
+      return isSmartContractCode(code);
+    }
+    return false;
   }
 }
 

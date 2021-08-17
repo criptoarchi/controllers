@@ -57,7 +57,7 @@ export class BaseController<C extends BaseConfig, S extends BaseState> {
 
   private internalState: S = this.defaultState;
 
-  private internalListeners: Listener<S>[] = [];
+  private internalListeners: Map<string, Listener<S>>[] = [];
 
   /**
    * Creates a BaseController instance. Both initial state and initial
@@ -141,28 +141,70 @@ export class BaseController<C extends BaseConfig, S extends BaseState> {
     if (this.disabled) {
       return;
     }
-    this.internalListeners.forEach((listener) => {
-      listener(this.internalState);
+    this.internalListeners.forEach((listenerMap) => {
+      for (const [, listener] of listenerMap) {
+        listener(this.internalState);
+      }
     });
   }
 
   /**
    * Adds new listener to be notified of state changes
    *
+   * @param key - same listener find
    * @param listener - Callback triggered when state changes
    */
-  subscribe(listener: Listener<S>) {
-    this.internalListeners.push(listener);
+  subscribe(findForKey: string, listener: Listener<S>) {
+    const index = this.internalListeners.findIndex((listenerMap) => {
+      let result = false;
+      for (const [key] of listenerMap) {
+        result = key === findForKey;
+      }
+      return result;
+    });
+    if (index === -1) {
+      const map: Map<string, Listener<S>> = new Map<string, Listener<S>>();
+      map.set(findForKey, listener);
+      this.internalListeners.push(map);
+    }
   }
 
   /**
    * Removes existing listener from receiving state changes
    *
    * @param listener - Callback to remove
+   * @param findForKey - find for Listener
    * @returns - True if a listener is found and unsubscribed
    */
-  unsubscribe(listener: Listener<S>) {
-    const index = this.internalListeners.findIndex((cb) => listener === cb);
+  unsubscribeByListener(findForListener: Listener<S>) {
+    // const index = this.internalListeners.findIndex((cb) => listener === cb);
+    const index = this.internalListeners.findIndex((listenerMap) => {
+      let result = false;
+      for (const [, listener] of listenerMap) {
+        result = listener === findForListener;
+      }
+      return result;
+    });
+    index > -1 && this.internalListeners.splice(index, 1);
+    return index > -1;
+  }
+
+  /**
+   * Removes existing listener from receiving state changes
+   *
+   * @param listener - Callback to remove
+   * @param findForKey - find for Listener
+   * @returns - True if a listener is found and unsubscribed
+   */
+  unsubscribe(findForKey: string) {
+    const index = this.internalListeners.findIndex((listenerMap) => {
+      let result = false;
+      for (const [key] of listenerMap) {
+        result = key === findForKey;
+      }
+      return result;
+    });
+    // const index = this.internalListeners.findIndex((cb) => listener === cb);
     index > -1 && this.internalListeners.splice(index, 1);
     return index > -1;
   }
