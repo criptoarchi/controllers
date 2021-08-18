@@ -74,6 +74,7 @@ export interface Transaction {
   to?: string;
   value?: string;
   amount?: string;
+  payloadId?: string;
 }
 
 /**
@@ -538,6 +539,7 @@ export class TransactionController extends BaseController<
       toSmartContract: transferInformation && false,
       fromSmartContract: transferInformation && false,
       amount: transferInformation && transaction.amount,
+      payloadId: transaction.payloadId && transaction.payloadId,
     };
 
     try {
