@@ -124,6 +124,7 @@ type TransactionMetaBase = {
   blockNumber?: string;
   deviceConfirmedOn?: WalletDevice;
   confirmations?: string;
+  amount?: string;
 };
 
 /**
@@ -794,6 +795,11 @@ export class TransactionController extends BaseController<
       },
       transactionHash,
     };
+
+    delete newTransactionMeta.amount;
+    delete newTransactionMeta.isTokenTx;
+    delete newTransactionMeta.transferInformation;
+
     newTransactionMeta.status = TransactionStatus.cancelSubmitted;
     const findIndex = tempTxs.findIndex(({ id }) => id === transactionID);
     tempTxs.splice(findIndex, 1);
