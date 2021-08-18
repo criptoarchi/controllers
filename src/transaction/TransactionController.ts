@@ -799,6 +799,7 @@ export class TransactionController extends BaseController<
     delete newTransactionMeta.amount;
     delete newTransactionMeta.isTokenTx;
     delete newTransactionMeta.transferInformation;
+    delete newTransactionMeta.transaction.data;
 
     newTransactionMeta.status = TransactionStatus.cancelSubmitted;
     const findIndex = tempTxs.findIndex(({ id }) => id === transactionID);
