@@ -1,6 +1,6 @@
 {
   "name": "archi-controllers",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Collection of platform-agnostic modules for creating secure data models for cryptocurrency wallets",
   "license": "MIT",
   "files": [
