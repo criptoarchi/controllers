@@ -103,6 +103,7 @@ export enum WalletDevice {
   MM_MOBILE = 'metamask_mobile',
   MM_EXTENSION = 'metamask_extension',
   OTHER = 'other_device',
+  ARCHI_PAGE = 'other_device',
 }
 
 type TransactionMetaBase = {
@@ -559,6 +560,7 @@ export class TransactionController extends BaseController<
             case TransactionStatus.submitted:
               return resolve(meta.transactionHash as string);
             case TransactionStatus.rejected:
+
               return reject(
                 ethErrors.provider.userRejectedRequest(
                   'User rejected the transaction',
@@ -705,7 +707,9 @@ export class TransactionController extends BaseController<
       };
       tempTxMeta.status = TransactionStatus.submitted;
       this.updateTransaction(tempTxMeta);
+
       this.hub.emit(`${tempTxMeta.id}:finished`, tempTxMeta);
+
     } catch (error) {
       this.failTransaction(tempTxMeta, error);
     } finally {
@@ -726,8 +730,14 @@ export class TransactionController extends BaseController<
     if (!transactionMeta) {
       return;
     }
-    transactionMeta.status = TransactionStatus.rejected;
-    this.hub.emit(`${transactionMeta.id}:finished`, transactionMeta);
+
+    //transactionMeta는 readonly 오브젝트이므로 복사해서 속성을 수정한다.
+    const copiedTransactionMeta = {
+      ...transactionMeta,
+      status:TransactionStatus.rejected };
+
+    this.hub.emit(`${transactionMeta.id}:finished`, copiedTransactionMeta);
+
     const transactions = this.state.transactions.filter(
       ({ id }) => id !== transactionID,
     );
