@@ -34,12 +34,14 @@ export interface CoinGeckoPlatform {
  *
  * Token representation
  *
+ * @property name - Name of the token
  * @property address - Hex address of the token contract
  * @property decimals - Number of decimals the token uses
  * @property symbol - Symbol of the token
  * @property image - Image of the token, url or bit32 image
  */
 export interface Token {
+  name: string;
   address: string;
   decimals: number;
   symbol: string;

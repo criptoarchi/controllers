@@ -476,19 +476,22 @@ export class KeyringController extends BaseController<
   /**
    * Adds new listener to be notified of state changes
    *
+   * @param key
    * @param listener - Callback triggered when state changes
    */
-  subscribe(listener: Listener<KeyringState>) {
+  subscribe(key: string, listener: Listener<KeyringState>) {
+    console.log(key);
     privates.get(this).keyring.store.subscribe(listener);
   }
 
   /**
    * Removes existing listener from receiving state changes
    *
+   * @param key
    * @param listener - Callback to remove
    * @returns - True if a listener is found and unsubscribed
    */
-  unsubscribe(listener: Listener<KeyringState>) {
+  unsubscribeByListener(listener: Listener<KeyringState>) {
     return privates.get(this).keyring.store.unsubscribe(listener);
   }
 

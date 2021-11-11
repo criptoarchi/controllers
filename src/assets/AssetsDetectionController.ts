@@ -352,6 +352,7 @@ export class AssetsDetectionController extends BaseController<
         }
         if (!ignored) {
           tokensToAdd.push({
+            name: tokenList[tokenAddress].name,
             address: tokenAddress,
             decimals: tokenList[tokenAddress].decimals,
             symbol: tokenList[tokenAddress].symbol,

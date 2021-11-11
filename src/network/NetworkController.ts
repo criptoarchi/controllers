@@ -111,25 +111,25 @@ export class NetworkController extends BaseController<
     nickname?: string,
   ) {
     this.update({ isCustomNetwork: this.getIsCustomNetwork(chainId) });
-    switch (type) {
-      case 'kovan':
-      case MAINNET:
-      case 'rinkeby':
-      case 'goerli':
-      case 'optimism':
-      case 'optimismTest':
-      case 'ropsten':
-        this.setupInfuraProvider(type);
-        break;
-      case 'localhost':
-        this.setupStandardProvider(LOCALHOST_RPC_URL);
-        break;
-      case RPC:
-        rpcTarget &&
-          this.setupStandardProvider(rpcTarget, chainId, ticker, nickname);
-        break;
-      default:
-        throw new Error(`Unrecognized network type: '${type}'`);
+    if (rpcTarget) {
+      this.setupStandardProvider(rpcTarget, chainId, ticker, nickname);
+    } else {
+      switch (type) {
+        case 'kovan':
+        case MAINNET:
+        case 'rinkeby':
+        case 'goerli':
+        case 'optimism':
+        case 'optimismTest':
+        case 'ropsten':
+          this.setupInfuraProvider(type);
+          break;
+        case 'localhost':
+          this.setupStandardProvider(LOCALHOST_RPC_URL);
+          break;
+        default:
+          throw new Error(`Unrecognized network type: '${type}'`);
+      }
     }
   }
 

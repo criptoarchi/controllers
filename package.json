@@ -1,6 +1,6 @@
 {
-  "name": "@metamask/controllers",
-  "version": "13.0.0",
+  "name": "archi-controllers",
+  "version": "1.2.4",
   "description": "Collection of platform-agnostic modules for creating secure data models for cryptocurrency wallets",
   "license": "MIT",
   "files": [
@@ -27,16 +27,18 @@
     "build": "rimraf dist && tsc --project .",
     "build:watch": "yarn build --watch",
     "build:link": "yarn build && cd dist && yarn link && rm -rf node_modules && cd ..",
-    "doc": "typedoc && touch docs/.nojekyll"
+    "doc": "typedoc && touch docs/.nojekyll",
+    "prepare": "yarn build"
   },
-  "homepage": "https://github.com/MetaMask/controllers#readme",
+  "homepage": "https://github.com/criptoarchi/controllers/tree/new/forCriptoarchi#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/MetaMask/controllers.git"
+    "url": "https://github.com/criptoarchi/controllers/tree/new/forCriptoarchi"
   },
   "keywords": [
-    "MetaMask",
-    "Ethereum"
+    "Ethereum",
+    "ArchiPage",
+    "MetaMask"
   ],
   "bugs": {
     "url": "https://github.com/MetaMask/controllers/issues"
@@ -70,7 +72,7 @@
     "single-call-balance-checker-abi": "^1.0.0",
     "uuid": "^8.3.2",
     "web3": "^0.20.7",
-    "web3-provider-engine": "^16.0.1"
+    "web3-provider-engine": "^16.0.3"
   },
   "devDependencies": {
     "@lavamoat/allow-scripts": "^1.0.6",
